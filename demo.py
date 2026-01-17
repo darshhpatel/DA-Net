@@ -45,11 +45,17 @@ class test_Dataset(data.Dataset):
         print('crop size', size)
         self.format = format
         self.clip_length = clip_length
-        self.haze_imgs_dir = sorted(os.listdir(os.path.join(path, hazy)))
-        self.haze_imgs = [os.path.join(path, hazy, img) for img in self.haze_imgs_dir]
+        hazy_dir_path = os.path.join(path, hazy)
+        self.haze_imgs_dir = sorted([
+            f for f in os.listdir(hazy_dir_path)
+            if os.path.isfile(os.path.join(hazy_dir_path, f)) and f.lower().endswith('.png')
+        ])
+        self.haze_imgs = [os.path.join(hazy_dir_path, img) for img in self.haze_imgs_dir]
         self.clear_dir = os.path.join(path, GT)
         self.num_frames = len(self.haze_imgs)
         self.valid_indices = list(range(self.clip_length // 2, self.num_frames - self.clip_length // 2))
+        print(f"[test_Dataset] Found images: {len(self.haze_imgs)}")
+        print(f"[test_Dataset] Valid indices: {self.valid_indices}")
 
     def __getitem__(self, index):
         center = self.valid_indices[index]
@@ -61,7 +67,8 @@ class test_Dataset(data.Dataset):
             haze = Image.open(self.haze_imgs[idx])
             img = self.haze_imgs[idx]
             id = os.path.basename(img)
-            clear_name = id
+            # Map hazy_XXXX.png to clear_XXXX.png
+            clear_name = id.replace('hazy_', 'clear_')
             clear = Image.open(os.path.join(self.clear_dir, clear_name))
             clear = tfs.CenterCrop(haze.size[::-1])(clear)
             haze, clear = self.augData(haze.convert("RGB"), clear.convert("RGB"))
@@ -93,6 +100,8 @@ def test(test_loader, network, result_dir=None, clip_length=5):
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
     total_time = 0.0
+    print('Number of test samples:', len(test_loader.dataset))
+    count = 0
     for i, (input_clips, targets, img_name) in enumerate(test_loader):
         # input_clips: [B, T, C, H, W], targets: [B, T, C, H, W]
         inputs = input_clips.to('cuda')
@@ -143,7 +152,7 @@ def test(test_loader, network, result_dir=None, clip_length=5):
 def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    CLIP_LENGTH = 5
+    CLIP_LENGTH = 1  # Force single-frame for testing to support small test sets
     test_dataset = test_Dataset(opt.test_dir, clip_length=CLIP_LENGTH)
     test_loader = DataLoader(test_dataset,
                              batch_size=1,
@@ -153,6 +162,7 @@ def main():
     from DA_Net import DA_Net_model
     net = DA_Net_model(in_chans=3, out_chans=4, clip_length=CLIP_LENGTH).to(device)
     net = nn.DataParallel(net)
+    # Use correct input shape for video model
     summary(net, (1, CLIP_LENGTH, 3, 64, 64), depth=0)
     param_size = 0
     buffer_size = 0
@@ -162,10 +172,18 @@ def main():
         buffer_size += buffer.nelement() * buffer.element_size()
     size_all_mb = (param_size + buffer_size) / 1024**2
     print('Size: {:.3f} MB'.format(size_all_mb))
-    macs, params = get_model_complexity_info(net, (3, 224, 224), as_strings=True,
-                                           print_per_layer_stat=False, verbose=False)
-    print('{:<30}  {:<8}'.format('Computational complexity (MACs): ', macs))
-    print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+    # ptflops expects (T, C, H, W) for video input
+    try:
+        macs, params = get_model_complexity_info(net, (CLIP_LENGTH, 3, 64, 64), as_strings=True,
+                                               print_per_layer_stat=False, verbose=False)
+    except Exception as e:
+        macs, params = None, None
+        print('MACs/params could not be computed:', e)
+    if macs is not None and params is not None:
+        print('{:<30}  {:<8}'.format('Computational complexity (MACs): ', macs))
+        print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+    else:
+        print('MACs/params could not be computed due to input shape mismatch.')
     ckp = torch.load(model_dir, map_location=device)
     net.load_state_dict(ckp['model'])
     test(test_loader, net, clip_length=CLIP_LENGTH)
