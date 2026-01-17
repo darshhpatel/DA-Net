@@ -334,18 +334,19 @@ class DA_Net_model(nn.Module):
         return x
 
     def forward(self, x):
-        # x: [B, T, C, H, W]
+        # Accepts [B, T, C, H, W] or [B, C, H, W] (adds T=1 if needed)
+        if x.dim() == 4:
+            x = x.unsqueeze(1)  # Add temporal dimension
         B, T, C, H, W = x.shape
         # Temporal alignment (MAP-NET style)
-        x = self.temporal_align(x)  # [B, embed_dim, H, W]
-        H_pad, W_pad = x.shape[2:]
-        x = self.check_image_size(x)
-        feat = self.forward_features(x)
+        x_feat = self.temporal_align(x)  # [B, embed_dim, H, W]
+        H_pad, W_pad = x_feat.shape[2:]
+        x_feat = self.check_image_size(x_feat)
+        feat = self.forward_features(x_feat)
         K, B_ = torch.split(feat, (1, 3), dim=1)
-        # Expand K, B_ to match input if needed
-        x = K * x - B_ + x
-        x = x[:, :, :H, :W]
-        return x
+        out = K - B_
+        out = out[:, :, :H, :W]
+        return out
 
 def DA_Net_t():
     return DA_Net_model(
