@@ -71,6 +71,7 @@ def test(test_model, loader_test):
         psnrs.append(psnr1)
         return np.mean(ssims), np.mean(psnrs)
     
+
 if __name__ == "__main__":
     seed_torch(seed=1234)
 
@@ -82,8 +83,10 @@ if __name__ == "__main__":
     trainpath = opt.train
     testpath = opt.test
 
-    loader_train = DataLoader(dataset=RS_Dataset(path+'/'+trainpath,train=True,format='.png'),batch_size=BS,shuffle=True)
-    loader_test = DataLoader(dataset=RS_Dataset(path+'/'+testpath,train=False,size='whole img',format='.png'),batch_size=1,shuffle=False)
+    CLIP_LENGTH = 5  # Number of frames per video clip (should match model and dataloader)
+
+    loader_train = DataLoader(dataset=RS_Dataset(path+'/'+trainpath, train=True, format='.png', clip_length=CLIP_LENGTH), batch_size=BS, shuffle=True)
+    loader_test = DataLoader(dataset=RS_Dataset(path+'/'+testpath, train=False, size='whole img', format='.png', clip_length=CLIP_LENGTH), batch_size=1, shuffle=False)
 
     net = DA_Net_t()
     net = net.to(opt.device)
@@ -131,11 +134,4 @@ if __name__ == "__main__":
                     'model': net.state_dict()
                 }, os.path.join(opt.model_dir, 'DA-Net'+'_'+'RSID'+'_'+str(epoch)+'.pk'))
                 print(f'\n model saved at epoch :{epoch}| max_psnr:{max_psnr:.4f}|max_ssim:{max_ssim:.4f}')
-
-                # RSID
-                # RICE1
-                # RICE2
-                # SateHaze1k_thin
-                # SateHaze1k_moderate
-                # SateHaze1k_thick
 

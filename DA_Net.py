@@ -245,13 +245,36 @@ class PatchUnEmbed(nn.Module):
         return x
 
 
+
+# --- Temporal Alignment Block (inspired by MAP-NET STDABlock) ---
+class TemporalAlignmentBlock(nn.Module):
+    def __init__(self, in_channels, embed_dim):
+        super().__init__()
+        # Project input channels to embed_dim before temporal attention
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=1)
+        self.temporal_attn = nn.Conv3d(embed_dim, embed_dim, kernel_size=1)
+        self.softmax = nn.Softmax(dim=2)  # over time
+
+    def forward(self, x):
+        # x: [B, T, C, H, W] -> [B, C, T, H, W]
+        x = x.permute(0, 2, 1, 3, 4)
+        x = self.proj(x)  # [B, embed_dim, T, H, W]
+        attn = self.temporal_attn(x)  # [B, embed_dim, T, H, W]
+        attn_weights = self.softmax(attn)
+        x = (x * attn_weights).sum(dim=2)  # Weighted sum over time: [B, embed_dim, H, W]
+        return x
+
 class DA_Net_model(nn.Module):
-    def __init__(self, in_chans=3, out_chans=4, embed_dims=[24, 48, 96, 48, 24], depths=[1, 1, 2, 1, 1]):
+    def __init__(self, in_chans=3, out_chans=4, embed_dims=[24, 48, 96, 48, 24], depths=[1, 1, 2, 1, 1], clip_length=5):
         super(DA_Net_model, self).__init__()
         self.patch_size = 4
+        self.clip_length = clip_length
+
+        # Temporal alignment block (MAP-NET style)
+        self.temporal_align = TemporalAlignmentBlock(in_chans, embed_dims[0])
 
         self.patch_embed = PatchEmbed(
-            patch_size=1, in_chans=in_chans, embed_dim=embed_dims[0], kernel_size=3)
+            patch_size=1, in_chans=embed_dims[0], embed_dim=embed_dims[0], kernel_size=3)
         self.layer1 = BasicLayer(dim=embed_dims[0], depth=depths[0], network_depth=sum(depths))
 
         self.skip1 = nn.Conv2d(embed_dims[0], embed_dims[0], 1)
@@ -286,9 +309,8 @@ class DA_Net_model(nn.Module):
         mod_pad_w = (self.patch_size - w % self.patch_size) % self.patch_size
         x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
         return x
-	
-    def forward_features(self, x):
 
+    def forward_features(self, x):
         x = self.patch_embed(x)
         x = self.layer1(x)
         skip1 = x
@@ -311,15 +333,17 @@ class DA_Net_model(nn.Module):
 
         return x
 
-
     def forward(self, x):
-        H, W = x.shape[2:]
+        # x: [B, T, C, H, W]
+        B, T, C, H, W = x.shape
+        # Temporal alignment (MAP-NET style)
+        x = self.temporal_align(x)  # [B, embed_dim, H, W]
+        H_pad, W_pad = x.shape[2:]
         x = self.check_image_size(x)
-        
         feat = self.forward_features(x)
-        
-        K, B = torch.split(feat, (1, 3), dim=1)
-        x = K * x - B + x
+        K, B_ = torch.split(feat, (1, 3), dim=1)
+        # Expand K, B_ to match input if needed
+        x = K * x - B_ + x
         x = x[:, :, :H, :W]
         return x
 

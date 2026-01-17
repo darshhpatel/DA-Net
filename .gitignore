@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+env.bak/
+
+# Data
+*.h5
+*.hdf5
+*.pth
+*.ckpt
+*.pt
+*.pkl
+*.npz
+*.npy
+*.log
+*.csv
+*.db
+*.sqlite3
+*.sqlite
+*.log
+*.tmp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model outputs
+output/
+outputs/
+results/
+
+# Trained models
+trained_models/
+
+# Images
+img/
+
+# Dataset cache
+*.zip
+*.tar.gz
+*.tar
+
+# Misc
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Ignore MAP-Net repo if present
+MAP-Net/

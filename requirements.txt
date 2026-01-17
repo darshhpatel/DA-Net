@@ -1,0 +1,18 @@
+# requirements.txt for DA-Net video dehazing
+# Core
+numpy
+opencv-python
+Pillow
+torch>=1.10
+torchvision
+timm
+tqdm
+# For perceptual loss
+pytorch-msssim
+# For model summary and complexity
+ptflops
+torchinfo
+# Optional: for SateHaze1K or other datasets
+scipy
+# For argument parsing
+argparse

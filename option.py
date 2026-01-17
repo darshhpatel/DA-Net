@@ -4,6 +4,7 @@ import warnings
 import torch
 warnings.filterwarnings('ignore')
 
+
 parser = argparse.ArgumentParser()
 # RSID_100
 # RICE1_100
@@ -28,11 +29,17 @@ parser.add_argument('--crop_size', type=int, default=240, help='Takes effect whe
 parser.add_argument('--no_lr_sche', action='store_true', help='no lr cos schedule')
 parser.add_argument('--clip', action='store_true', help='use grad clip')
 parser.add_argument('--gpu', default='0', type=str, help='GPUs used for training')
-
+# New: single video mode
+parser.add_argument('--single_video', action='store_true', help='Train/test on a single video (hazy/ and GT/ in dataset_dir)')
 
 opt = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu
 opt.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# If single_video is set, override train/test paths
+if opt.single_video:
+    opt.train = ''
+    opt.test = ''
 
 print(opt)
 print('model_dir:', opt.model_dir)
