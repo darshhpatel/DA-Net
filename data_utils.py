@@ -24,12 +24,20 @@ class RS_Dataset(data.Dataset):
         self.train = train
         self.format = format
         self.clip_length = clip_length  # Number of frames per video clip
-        self.haze_imgs_dir = sorted(os.listdir(os.path.join(path, hazy)))
-        self.haze_imgs = [os.path.join(path, hazy, img) for img in self.haze_imgs_dir]
+        hazy_dir_path = os.path.join(path, hazy)
+        self.haze_imgs_dir = sorted([
+            f for f in os.listdir(hazy_dir_path)
+            if os.path.isfile(os.path.join(hazy_dir_path, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg'))
+        ])
+        self.haze_imgs = [os.path.join(hazy_dir_path, img) for img in self.haze_imgs_dir]
         self.clear_dir = os.path.join(path, GT)
+        # Debug prints for test set loading
+        print(f"[RS_Dataset] Folder: {hazy_dir_path}")
+        print(f"[RS_Dataset] Found images: {len(self.haze_imgs)}")
         # Assume all frames in a folder are from a single video, sorted by name
         self.num_frames = len(self.haze_imgs)
         self.valid_indices = list(range(self.clip_length // 2, self.num_frames - self.clip_length // 2))
+        print(f"[RS_Dataset] Valid indices: {len(self.valid_indices)} (clip_length={self.clip_length})")
     def __getitem__(self, index):
         # Adjust index to valid range for clips
         center = self.valid_indices[index]
