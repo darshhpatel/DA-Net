@@ -34,9 +34,11 @@ def train(train_model, train_loader, optim, criterion, loss_network, scaler):
         y = batch[1].to(opt.device) # GT
         with autocast():
             out = train_model(x)
-
-            pixel_loss = criterion[0](out, y)
-            perceptual_loss = loss_network(out, y)
+            # Handle 4D output and 5D ground truth
+            out_center = out
+            y_center = y[:, y.shape[1] // 2, :, :, :] if y.dim() == 5 else y
+            pixel_loss = criterion[0](out_center, y_center)
+            perceptual_loss = loss_network(out_center, y_center)
 
             loss = pixel_loss + lambda_loss*perceptual_loss
 
@@ -61,15 +63,26 @@ def test(test_model, loader_test):
     torch.cuda.empty_cache()
     ssims = []
     psnrs = []
+    print('Test set size:', len(loader_test.dataset))
     for i, (inputs, targets) in enumerate(loader_test):
         inputs = inputs.to(opt.device)
         targets = targets.to(opt.device)
         pred = test_model(inputs)
-        ssim1 = ssim(pred, targets).item()
-        psnr1 = psnr(pred, targets)
+        print(f'Batch {i}: pred shape: {pred.shape}, targets shape: {targets.shape}')
+        if targets.dim() == 5:
+            targets_center = targets[:, targets.shape[1] // 2, :, :, :]
+        else:
+            targets_center = targets
+        ssim1 = ssim(pred, targets_center).item()
+        psnr1 = psnr(pred, targets_center)
+        print(f'Batch {i}: ssim={ssim1}, psnr={psnr1}')
         ssims.append(ssim1)
         psnrs.append(psnr1)
-        return np.mean(ssims), np.mean(psnrs)
+    if len(ssims) == 0 or len(psnrs) == 0:
+        print('No test samples found or all metrics are zero.')
+        return 0.0, 0.0
+    print(f'Mean SSIM: {np.mean(ssims)}, Mean PSNR: {np.mean(psnrs)}')
+    return np.mean(ssims), np.mean(psnrs)
     
 
 if __name__ == "__main__":
@@ -86,7 +99,8 @@ if __name__ == "__main__":
     CLIP_LENGTH = 5  # Number of frames per video clip (should match model and dataloader)
 
     loader_train = DataLoader(dataset=RS_Dataset(path+'/'+trainpath, train=True, format='.png', clip_length=CLIP_LENGTH), batch_size=BS, shuffle=True)
-    loader_test = DataLoader(dataset=RS_Dataset(path+'/'+testpath, train=False, size='whole img', format='.png', clip_length=CLIP_LENGTH), batch_size=1, shuffle=False)
+    # Use clip_length=1 for test set to support small test sets
+    loader_test = DataLoader(dataset=RS_Dataset(path+'/'+testpath, train=False, size='whole img', format='.png', clip_length=1), batch_size=1, shuffle=False)
 
     net = DA_Net_t()
     net = net.to(opt.device)
