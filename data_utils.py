@@ -11,8 +11,7 @@ from option import opt
 sys.path.append('net')
 sys.path.append('')
 crop_size = 'whole_img'
-if opt.crop:
-    crop_size = opt.crop_size
+crop_size = 64  # Force crop size to 64 for minimal memory usage
 
 class RS_Dataset(data.Dataset):
     #def __init__(self,path,train,size=crop_size,format='.png',hazy='cloud',GT='label'): # RICE
@@ -25,12 +24,21 @@ class RS_Dataset(data.Dataset):
         self.format = format
         self.clip_length = clip_length  # Number of frames per video clip
         hazy_dir_path = os.path.join(path, hazy)
-        self.haze_imgs_dir = sorted([
-            f for f in os.listdir(hazy_dir_path)
-            if os.path.isfile(os.path.join(hazy_dir_path, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg'))
-        ])
-        self.haze_imgs = [os.path.join(hazy_dir_path, img) for img in self.haze_imgs_dir]
+        # Recursively collect all image files from hazy_dir_path
+        self.haze_imgs = []
+        found_files = []
+        for root, _, files in os.walk(hazy_dir_path):
+            for f in sorted(files):
+                found_files.append(os.path.join(root, f))
+                if f.lower().endswith((".png", ".jpg", ".jpeg")):
+                    self.haze_imgs.append(os.path.join(root, f))
+        print(f"[RS_Dataset] Example files found in hazy_dir_path: {found_files[:10]}")
+        print(f"[RS_Dataset] Example images used: {self.haze_imgs[:10]}")
+        # Limit to 500 images for training
+        if self.train:
+            self.haze_imgs = self.haze_imgs[:500]
         self.clear_dir = os.path.join(path, GT)
+        # Optionally, you can also recursively collect GT images if needed
         # Debug prints for test set loading
         print(f"[RS_Dataset] Folder: {hazy_dir_path}")
         print(f"[RS_Dataset] Found images: {len(self.haze_imgs)}")
@@ -48,18 +56,15 @@ class RS_Dataset(data.Dataset):
         for idx in indices:
             haze = Image.open(self.haze_imgs[idx])
             img = self.haze_imgs[idx]
-            id = os.path.basename(img)
-            # Map hazy_XXXX.png to clear_XXXX.png
-            if id.startswith('hazy_'):
-                clear_name = 'clear_' + id[len('hazy_'):]
-            else:
-                clear_name = id  # fallback if naming is already matching
-            clear = Image.open(os.path.join(self.clear_dir, clear_name))
-            clear = tfs.CenterCrop(haze.size[::-1])(clear)
+            # Find relative path from hazy root, then use it under GT root
+            rel_path = os.path.relpath(img, start=os.path.join(os.path.dirname(self.clear_dir), 'hazy'))
+            gt_img_path = os.path.join(self.clear_dir, rel_path)
+            clear = Image.open(gt_img_path)
+            # Always crop to self.size if not 'whole_img'
             if not isinstance(self.size, str):
-                i, j, h, w = tfs.RandomCrop.get_params(haze, output_size=(self.size, self.size))
-                haze = FF.crop(haze, i, j, h, w)
-                clear = FF.crop(clear, i, j, h, w)
+                # Center crop to the specified size
+                haze = tfs.CenterCrop(self.size)(haze)
+                clear = tfs.CenterCrop(self.size)(clear)
             haze, clear = self.augData(haze.convert("RGB"), clear.convert("RGB"))
             haze_clip.append(haze)
             clear_clip.append(clear)
