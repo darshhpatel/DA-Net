@@ -10,8 +10,7 @@ from option import opt
 
 sys.path.append('net')
 sys.path.append('')
-crop_size = 'whole_img'
-crop_size = 64  # Force crop size to 64 for minimal memory usage
+crop_size = 'whole_img'  # Use original image size
 
 class RS_Dataset(data.Dataset):
     #def __init__(self,path,train,size=crop_size,format='.png',hazy='cloud',GT='label'): # RICE
@@ -34,9 +33,7 @@ class RS_Dataset(data.Dataset):
                     self.haze_imgs.append(os.path.join(root, f))
         print(f"[RS_Dataset] Example files found in hazy_dir_path: {found_files[:10]}")
         print(f"[RS_Dataset] Example images used: {self.haze_imgs[:10]}")
-        # Limit to 500 images for training
-        if self.train:
-            self.haze_imgs = self.haze_imgs[:500]
+        # Use all images for training and testing
         self.clear_dir = os.path.join(path, GT)
         # Optionally, you can also recursively collect GT images if needed
         # Debug prints for test set loading
